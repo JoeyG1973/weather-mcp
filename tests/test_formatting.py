@@ -383,3 +383,80 @@ class TestNoForbiddenCharacters:
     def test_every_wmo_phrase_is_clean(self) -> None:
         for code, phrase in WMO_CODE_PHRASES.items():
             self._assert_clean(phrase, f"WMO_CODE_PHRASES[{code}]")
+
+
+class TestUserInputSanitization:
+    """User-controlled strings interpolated into TTS prose must never carry forbidden characters."""
+
+    HOSTILE_INPUTS = [
+        "(Springfield)",
+        "Springfield/IL",
+        "Springfield_City",
+        "<script>alert('x')</script>",
+        "Spring*field",
+        "City|Name",
+        "[Springfield]",
+        "City\nName",
+        "City\tName",
+        "City   with   weird   spacing",
+    ]
+
+    @pytest.mark.parametrize("hostile", HOSTILE_INPUTS)
+    def test_format_not_found_sanitizes_query(self, hostile: str) -> None:
+        out = format_not_found(hostile)
+        # Reuse the same forbidden set defined in TestNoForbiddenCharacters.
+        forbidden = set("*_#`|<>[](){}&@~^\\/=+°%;")
+        bad = [c for c in forbidden if c in out]
+        assert not bad, f"format_not_found({hostile!r}) leaked {bad}: {out!r}"
+        assert "\n" not in out
+        assert "\t" not in out
+        assert "  " not in out  # no double spaces (sanitizer collapses whitespace)
+
+    @pytest.mark.parametrize("hostile", HOSTILE_INPUTS)
+    def test_format_disambiguation_sanitizes_query(self, hostile: str) -> None:
+        candidates = [DisambiguationCandidate("Springfield", "Illinois")]
+        out = format_disambiguation(query=hostile, qualifier=None, candidates=candidates)
+        forbidden = set("*_#`|<>[](){}&@~^\\/=+°%;")
+        bad = [c for c in forbidden if c in out]
+        assert not bad, f"format_disambiguation query={hostile!r} leaked {bad}: {out!r}"
+        assert "\n" not in out
+        assert "  " not in out
+
+    @pytest.mark.parametrize("hostile", HOSTILE_INPUTS)
+    def test_format_disambiguation_sanitizes_qualifier(self, hostile: str) -> None:
+        candidates = [DisambiguationCandidate("Springfield", "Illinois")]
+        out = format_disambiguation(query="Springfield", qualifier=hostile, candidates=candidates)
+        forbidden = set("*_#`|<>[](){}&@~^\\/=+°%;")
+        bad = [c for c in forbidden if c in out]
+        assert not bad, f"format_disambiguation qualifier={hostile!r} leaked {bad}: {out!r}"
+
+
+class TestQualifierExpansionInDisambiguation:
+    def test_state_abbreviation_in_qualifier_is_spelled_out(self) -> None:
+        # 'Saint Louis, MO' triggers disambiguation because Open-Meteo returns
+        # small Saint Louises in other states. The qualifier 'MO' should be
+        # spoken as 'Missouri', not 'M O'.
+        candidates = [
+            DisambiguationCandidate("Saint Louis", "Michigan"),
+            DisambiguationCandidate("Saint Louis", "Oklahoma"),
+        ]
+        out = format_disambiguation(query="Saint Louis", qualifier="MO", candidates=candidates)
+        assert "in Missouri" in out
+        assert "in MO" not in out
+
+    def test_lowercase_state_abbreviation_is_expanded(self) -> None:
+        candidates = [DisambiguationCandidate("Springfield", "Illinois")]
+        out = format_disambiguation(query="Springfield", qualifier="ca", candidates=candidates)
+        assert "in California" in out
+        assert "in ca" not in out
+
+    def test_unknown_qualifier_passes_through_unchanged(self) -> None:
+        candidates = [DisambiguationCandidate("Jupiter", "Florida")]
+        out = format_disambiguation(query="Jupiter", qualifier="Mars", candidates=candidates)
+        assert "in Mars" in out
+        # 'Mars' is not a state abbreviation, so it stays as-is.
+
+    def test_full_state_name_qualifier_passes_through_unchanged(self) -> None:
+        candidates = [DisambiguationCandidate("Springfield", "Illinois")]
+        out = format_disambiguation(query="Springfield", qualifier="Florida", candidates=candidates)
+        assert "in Florida" in out

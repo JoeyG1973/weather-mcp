@@ -10,6 +10,21 @@ from __future__ import annotations
 from datetime import date as _date
 from typing import NamedTuple
 
+_FORBIDDEN_TTS_CHARS = set("*_#`|<>[](){}&@~^\\/=+°%;\n\r\t")
+
+
+def _sanitize_for_tts(text: str) -> str:
+    """Strip characters that voice engines pronounce by name or that violate the TTS policy.
+
+    Used for any caller-supplied text that gets interpolated into spoken responses
+    (the user's location query string, qualifier, etc.). Returns a string safe to
+    embed in TTS output: forbidden characters are removed, then internal whitespace
+    is collapsed.
+    """
+    cleaned = "".join(c for c in text if c not in _FORBIDDEN_TTS_CHARS)
+    return " ".join(cleaned.split())
+
+
 US_STATE_ABBREVIATIONS: dict[str, str] = {
     "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
     "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
@@ -233,15 +248,19 @@ def format_disambiguation(
 ) -> str:
     """Build the spoken 'did you mean' sentence."""
     body = _join_candidates_with_or(candidates)
+    clean_query = _sanitize_for_tts(query)
     if qualifier:
         # Qualified query whose qualifier didn't match — surface the failure first.
-        return f"I could not find {query} in {qualifier}. Did you mean {body}"
+        clean_qualifier = _sanitize_for_tts(qualifier)
+        spoken_qualifier = expand_state_abbreviation(clean_qualifier) or clean_qualifier
+        return f"I could not find {clean_query} in {spoken_qualifier}. Did you mean {body}"
     # Unqualified query — multiple results.
-    return f"There are several places called {query}. Did you mean {body}"
+    return f"There are several places called {clean_query}. Did you mean {body}"
 
 
 def format_not_found(query: str) -> str:
-    return f"I could not find a place called {query}. Please try a different city name."
+    clean_query = _sanitize_for_tts(query)
+    return f"I could not find a place called {clean_query}. Please try a different city name."
 
 
 def format_geocode_error() -> str:
