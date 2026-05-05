@@ -1,0 +1,9 @@
+{
+  "results": [
+    {"id": 11, "name": "Springfield", "latitude": 39.78, "longitude": -89.65, "country_code": "US", "country": "United States", "admin1": "Illinois", "population": 116250, "feature_code": "PPL"},
+    {"id": 12, "name": "Springfield", "latitude": 37.21, "longitude": -93.30, "country_code": "US", "country": "United States", "admin1": "Missouri", "population": 169176, "feature_code": "PPL"},
+    {"id": 13, "name": "Springfield", "latitude": 42.10, "longitude": -72.59, "country_code": "US", "country": "United States", "admin1": "Massachusetts", "population": 153606, "feature_code": "PPL"},
+    {"id": 14, "name": "Springfield", "latitude": 39.92, "longitude": -83.81, "country_code": "US", "country": "United States", "admin1": "Ohio", "population": 58662, "feature_code": "PPL"},
+    {"id": 15, "name": "Springfield", "latitude": 44.05, "longitude": -123.02, "country_code": "US", "country": "United States", "admin1": "Oregon", "population": 60177, "feature_code": "PPL"}
+  ]
+}

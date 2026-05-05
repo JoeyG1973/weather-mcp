@@ -1,0 +1,38 @@
+{
+  "results": [
+    {
+      "id": 1,
+      "name": "Jupiter",
+      "latitude": 26.93423,
+      "longitude": -80.0942,
+      "country_code": "US",
+      "country": "United States",
+      "admin1": "Florida",
+      "admin2": "Palm Beach",
+      "population": 61047,
+      "feature_code": "PPL"
+    },
+    {
+      "id": 2,
+      "name": "Jupiter",
+      "latitude": 35.45,
+      "longitude": -82.61,
+      "country_code": "US",
+      "country": "United States",
+      "admin1": "North Carolina",
+      "population": 250,
+      "feature_code": "PPL"
+    },
+    {
+      "id": 3,
+      "name": "Jupiter Inlet Beach Colony",
+      "latitude": 26.95,
+      "longitude": -80.07,
+      "country_code": "US",
+      "country": "United States",
+      "admin1": "Florida",
+      "population": 425,
+      "feature_code": "PPL"
+    }
+  ]
+}

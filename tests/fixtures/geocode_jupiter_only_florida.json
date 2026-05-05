@@ -1,0 +1,6 @@
+{
+  "results": [
+    {"id": 1, "name": "Jupiter", "latitude": 26.93, "longitude": -80.09, "country_code": "US", "country": "United States", "admin1": "Florida", "population": 61047, "feature_code": "PPL"},
+    {"id": 3, "name": "Jupiter", "latitude": 26.95, "longitude": -80.07, "country_code": "US", "country": "United States", "admin1": "Florida", "population": 425, "feature_code": "PPL"}
+  ]
+}
