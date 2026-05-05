@@ -62,3 +62,40 @@ def ordinal_word(n: int) -> str:
     tens = (n // 10) * 10
     ones = n % 10
     return f"{_TENS_CARDINAL[tens]}-{_ONES[ones]}"
+
+
+WMO_CODE_PHRASES: dict[int, str] = {
+    0: "clear skies",
+    1: "mostly clear",
+    2: "partly cloudy",
+    3: "overcast",
+    45: "foggy",
+    48: "freezing fog",
+    51: "light drizzle",
+    53: "drizzle",
+    55: "heavy drizzle",
+    56: "light freezing drizzle",
+    57: "freezing drizzle",
+    61: "light rain",
+    63: "rain",
+    65: "heavy rain",
+    66: "light freezing rain",
+    67: "freezing rain",
+    71: "light snow",
+    73: "snow",
+    75: "heavy snow",
+    77: "snow grains",
+    80: "rain showers",
+    81: "heavy rain showers",
+    82: "violent rain showers",
+    85: "snow showers",
+    86: "heavy snow showers",
+    95: "thunderstorms",
+    96: "thunderstorms with hail",
+    99: "thunderstorms with heavy hail",
+}
+
+
+def weather_code_to_phrase(code: int) -> str:
+    """Map a WMO weather code to a TTS-friendly phrase. Unknown codes return a generic phrase."""
+    return WMO_CODE_PHRASES.get(code, "unknown conditions")

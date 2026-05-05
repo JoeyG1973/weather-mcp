@@ -67,3 +67,41 @@ class TestStateAbbreviations:
         assert expand_state_abbreviation("Florida") is None
         assert expand_state_abbreviation("ZZ") is None
         assert expand_state_abbreviation("") is None
+
+
+from formatting import WMO_CODE_PHRASES, weather_code_to_phrase
+
+
+class TestWmoCodePhrases:
+    def test_table_covers_documented_codes(self) -> None:
+        # Open-Meteo documents these WMO codes. The set is fixed; we cover all of them.
+        documented = {
+            0,
+            1, 2, 3,
+            45, 48,
+            51, 53, 55,
+            56, 57,
+            61, 63, 65,
+            66, 67,
+            71, 73, 75, 77,
+            80, 81, 82,
+            85, 86,
+            95, 96, 99,
+        }
+        assert documented.issubset(WMO_CODE_PHRASES.keys())
+
+    def test_every_phrase_is_non_empty_lowercase_string(self) -> None:
+        for code, phrase in WMO_CODE_PHRASES.items():
+            assert isinstance(phrase, str)
+            assert phrase
+            assert phrase == phrase.lower()
+
+    def test_known_phrasings(self) -> None:
+        assert weather_code_to_phrase(0) == "clear skies"
+        assert weather_code_to_phrase(2) == "partly cloudy"
+        assert weather_code_to_phrase(61) == "light rain"
+        assert weather_code_to_phrase(95) == "thunderstorms"
+
+    def test_unknown_code_returns_generic_phrase(self) -> None:
+        # Defensive: if Open-Meteo returns a code we did not catalog, do not crash.
+        assert weather_code_to_phrase(999) == "unknown conditions"
