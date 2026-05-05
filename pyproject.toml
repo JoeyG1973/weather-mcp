@@ -9,6 +9,17 @@ dependencies = [
     "mcp>=1.27.0",
 ]
 
+[project.scripts]
+weather-mcp = "main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+include = ["main.py", "open_meteo.py", "formatting.py"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
