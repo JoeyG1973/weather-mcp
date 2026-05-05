@@ -8,6 +8,7 @@ no unit abbreviations, no degree or percent symbols.
 from __future__ import annotations
 
 from datetime import date as _date
+from typing import NamedTuple
 
 US_STATE_ABBREVIATIONS: dict[str, str] = {
     "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
@@ -204,3 +205,55 @@ def format_forecast(payload: dict, resolved_name: str, clamped_from: int | None)
         sentences.append(_per_day_sentence(anchor, conditions, hi, lo, precip, terse))
 
     return prefix + opener + " ".join(sentences)
+
+
+class DisambiguationCandidate(NamedTuple):
+    """A single 'did you mean' option, ready to read aloud as 'name, region'."""
+    name: str
+    region: str  # full state or country name — never an abbreviation
+
+
+def _join_candidates_with_or(candidates: list[DisambiguationCandidate]) -> str:
+    """Render candidates as 'A, region. B, region. Or C, region.'.
+
+    Uses periods between candidates (not semicolons) for cleaner TTS prosody.
+    The final candidate is preceded by 'Or '.
+    """
+    rendered = [f"{c.name}, {c.region}" for c in candidates]
+    if len(rendered) == 1:
+        return f"{rendered[0]}."
+    head = ". ".join(rendered[:-1])
+    return f"{head}. Or {rendered[-1]}."
+
+
+def format_disambiguation(
+    query: str,
+    qualifier: str | None,
+    candidates: list[DisambiguationCandidate],
+) -> str:
+    """Build the spoken 'did you mean' sentence."""
+    body = _join_candidates_with_or(candidates)
+    if qualifier:
+        # Qualified query whose qualifier didn't match — surface the failure first.
+        return f"I could not find {query} in {qualifier}. Did you mean {body}"
+    # Unqualified query — multiple results.
+    return f"There are several places called {query}. Did you mean {body}"
+
+
+def format_not_found(query: str) -> str:
+    return f"I could not find a place called {query}. Please try a different city name."
+
+
+def format_geocode_error() -> str:
+    return "I had trouble looking up that location. Please try again in a moment."
+
+
+def format_weather_error(resolved_name: str) -> str:
+    return (
+        f"I found {resolved_name}, but I had trouble getting the weather for it. "
+        f"Please try again in a moment."
+    )
+
+
+def format_empty_input() -> str:
+    return "I need a city name to look up the weather."

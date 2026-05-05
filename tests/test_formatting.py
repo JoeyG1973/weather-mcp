@@ -251,3 +251,73 @@ class TestFormatForecast:
         assert "high of 82" in out
         assert "high of 79" in out
         assert "high of 76" in out
+
+
+from formatting import (
+    DisambiguationCandidate,
+    format_disambiguation,
+    format_not_found,
+    format_geocode_error,
+    format_weather_error,
+    format_empty_input,
+)
+
+
+class TestErrorAndDisambiguationFormatters:
+    def test_disambiguation_unqualified_three_candidates(self) -> None:
+        candidates = [
+            DisambiguationCandidate(name="Springfield", region="Illinois"),
+            DisambiguationCandidate(name="Springfield", region="Missouri"),
+            DisambiguationCandidate(name="Springfield", region="Massachusetts"),
+        ]
+        out = format_disambiguation(query="Springfield", qualifier=None, candidates=candidates)
+        assert out == (
+            "There are several places called Springfield. "
+            "Did you mean Springfield, Illinois. Springfield, Missouri. Or Springfield, Massachusetts."
+        )
+
+    def test_disambiguation_qualified_no_match_three_candidates(self) -> None:
+        candidates = [
+            DisambiguationCandidate(name="Jupiter", region="Florida"),
+            DisambiguationCandidate(name="Jupiter", region="North Carolina"),
+            DisambiguationCandidate(name="Jupiter", region="Texas"),
+        ]
+        out = format_disambiguation(query="Jupiter", qualifier="Mars", candidates=candidates)
+        assert out == (
+            "I could not find Jupiter in Mars. "
+            "Did you mean Jupiter, Florida. Jupiter, North Carolina. Or Jupiter, Texas."
+        )
+
+    def test_disambiguation_two_candidates_uses_or_at_end(self) -> None:
+        candidates = [
+            DisambiguationCandidate(name="Springfield", region="Illinois"),
+            DisambiguationCandidate(name="Springfield", region="Missouri"),
+        ]
+        out = format_disambiguation(query="Springfield", qualifier=None, candidates=candidates)
+        assert out.endswith("Did you mean Springfield, Illinois. Or Springfield, Missouri.")
+
+    def test_disambiguation_qualifier_state_abbreviation_expanded(self) -> None:
+        candidates = [DisambiguationCandidate(name="Jupiter", region="Florida")]
+        out = format_disambiguation(query="Jupiter", qualifier="Mars", candidates=candidates)
+        # Single candidate edge case: still grammatical.
+        assert "Mars" in out
+        assert "Jupiter, Florida" in out
+
+    def test_format_not_found(self) -> None:
+        assert format_not_found("Springfield, Mars") == (
+            "I could not find a place called Springfield, Mars. Please try a different city name."
+        )
+
+    def test_format_geocode_error(self) -> None:
+        assert format_geocode_error() == (
+            "I had trouble looking up that location. Please try again in a moment."
+        )
+
+    def test_format_weather_error(self) -> None:
+        assert format_weather_error("Jupiter, Florida") == (
+            "I found Jupiter, Florida, but I had trouble getting the weather for it. "
+            "Please try again in a moment."
+        )
+
+    def test_format_empty_input(self) -> None:
+        assert format_empty_input() == "I need a city name to look up the weather."
