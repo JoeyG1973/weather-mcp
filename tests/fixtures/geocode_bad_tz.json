@@ -1,0 +1,16 @@
+{
+  "results": [
+    {
+      "id": 99,
+      "name": "Atlantis",
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "country_code": "ZZ",
+      "country": "Atlantis",
+      "admin1": "Atlantis",
+      "timezone": "Not/A_Real_Zone",
+      "population": 1,
+      "feature_code": "PPL"
+    }
+  ]
+}

@@ -10,7 +10,9 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone as _utc
 from typing import AsyncIterator, NamedTuple
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # ---------------------------------------------------------------------------
 # Third-party imports
@@ -30,6 +32,7 @@ from formatting import (
     format_forecast,
     format_geocode_error,
     format_not_found,
+    format_time_prefix,
     format_weather_error,
 )
 from open_meteo import GeocodeMatch, OpenMeteoError, fetch_current, fetch_forecast, geocode
@@ -44,6 +47,7 @@ class Resolved(NamedTuple):
     name: str       # spoken-back name, e.g. 'Jupiter, Florida'
     latitude: float
     longitude: float
+    timezone: str | None  # IANA name, e.g. 'America/New_York'; None if geocoder omitted it
 
 
 class Disambiguation(NamedTuple):
@@ -129,21 +133,27 @@ async def _resolve_location(client: httpx.AsyncClient, query: str) -> ResolveRes
     if qualifier:
         qualified = [m for m in matches if _qualifier_matches(m, qualifier)]
         if len(qualified) == 1:
-            m = qualified[0]
-            return Resolved(name=_resolved_name(m), latitude=m.latitude, longitude=m.longitude)
+            return _to_resolved(qualified[0])
         if len(qualified) > 1:
-            best = max(qualified, key=lambda m: m.population)
-            return Resolved(name=_resolved_name(best), latitude=best.latitude, longitude=best.longitude)
+            return _to_resolved(max(qualified, key=lambda m: m.population))
         # Qualifier didn't match anything — disambiguate against the original list.
         candidates = [_to_candidate(m) for m in _top_three_by_population(matches)]
         return Disambiguation(spoken=format_disambiguation(query=city, qualifier=qualifier, candidates=candidates))
 
     # Unqualified query.
     if len(matches) == 1:
-        m = matches[0]
-        return Resolved(name=_resolved_name(m), latitude=m.latitude, longitude=m.longitude)
+        return _to_resolved(matches[0])
     candidates = [_to_candidate(m) for m in _top_three_by_population(matches)]
     return Disambiguation(spoken=format_disambiguation(query=city, qualifier=None, candidates=candidates))
+
+
+def _to_resolved(match: GeocodeMatch) -> Resolved:
+    return Resolved(
+        name=_resolved_name(match),
+        latitude=match.latitude,
+        longitude=match.longitude,
+        timezone=match.timezone,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +162,30 @@ async def _resolve_location(client: httpx.AsyncClient, query: str) -> ResolveRes
 
 MIN_FORECAST_DAYS = 1
 MAX_FORECAST_DAYS = 14
+
+
+def _clock(tz) -> datetime:
+    """Return the current time in `tz`. Indirection so tests can pin the clock."""
+    return datetime.now(tz)
+
+
+def _now_in_zone(tz_name: str | None) -> tuple[datetime, bool]:
+    """Resolve `tz_name` to (now, abbreviation_ok).
+
+    On UTC fallback (None or unknown tz), abbreviation_ok is False so the prefix
+    omits the abbreviation — a soft signal that the time is uncalibrated.
+    """
+    if tz_name:
+        try:
+            return _clock(ZoneInfo(tz_name)), True
+        except ZoneInfoNotFoundError:
+            pass
+    return _clock(_utc.utc), False
+
+
+def _prefix_for(tz_name: str | None) -> str:
+    now, abbr_ok = _now_in_zone(tz_name)
+    return format_time_prefix(now, include_abbreviation=abbr_ok)
 
 
 async def get_current_weather(client: httpx.AsyncClient, location: str) -> str:
@@ -168,7 +202,7 @@ async def get_current_weather(client: httpx.AsyncClient, location: str) -> str:
     except OpenMeteoError:
         return format_weather_error(result.name)
 
-    return format_current(payload, result.name)
+    return f"{_prefix_for(result.timezone)} {format_current(payload, result.name)}"
 
 
 async def get_forecast(client: httpx.AsyncClient, location: str, days: int) -> str:
@@ -188,7 +222,7 @@ async def get_forecast(client: httpx.AsyncClient, location: str, days: int) -> s
     except OpenMeteoError:
         return format_weather_error(result.name)
 
-    return format_forecast(payload, result.name, clamped_from)
+    return f"{_prefix_for(result.timezone)} {format_forecast(payload, result.name, clamped_from)}"
 
 
 # ---------------------------------------------------------------------------

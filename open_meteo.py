@@ -27,6 +27,7 @@ class GeocodeMatch:
     latitude: float
     longitude: float
     population: int
+    timezone: str | None  # IANA name from the geocoder, e.g. 'America/New_York'
 
 
 async def geocode(client: httpx.AsyncClient, query: str) -> list[GeocodeMatch]:
@@ -54,6 +55,7 @@ async def geocode(client: httpx.AsyncClient, query: str) -> list[GeocodeMatch]:
             latitude=float(row["latitude"]),
             longitude=float(row["longitude"]),
             population=int(row.get("population") or 0),
+            timezone=row.get("timezone"),
         )
         for row in raw_results
     ]

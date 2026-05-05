@@ -7,7 +7,7 @@ no unit abbreviations, no degree or percent symbols.
 """
 from __future__ import annotations
 
-from datetime import date as _date
+from datetime import date as _date, datetime
 from typing import NamedTuple
 
 _FORBIDDEN_TTS_CHARS = set("*_#`|<>[](){}&@~^\\/=+°%;\n\r\t")
@@ -276,3 +276,28 @@ def format_weather_error(resolved_name: str) -> str:
 
 def format_empty_input() -> str:
     return "I need a city name to look up the weather."
+
+
+def format_time_prefix(now: datetime, *, include_abbreviation: bool = True) -> str:
+    """Spoken context line giving the local time at the queried location.
+
+    `now` must be timezone-aware. The abbreviation is included only when
+    include_abbreviation is True AND now.tzname() is purely ASCII letters
+    (e.g. 'EDT', 'JST'). Offset-style names like '+09' are dropped because
+    voice engines read them as 'plus zero nine'.
+    """
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("format_time_prefix requires a timezone-aware datetime")
+
+    hour_24 = now.hour
+    minute = now.minute
+    suffix = "AM" if hour_24 < 12 else "PM"
+    hour_12 = hour_24 % 12 or 12
+    weekday = now.strftime("%A")
+
+    abbr = now.tzname() if include_abbreviation else None
+    if abbr is not None and not abbr.isalpha():
+        abbr = None
+
+    abbr_part = f" {abbr}" if abbr else ""
+    return f"It is currently {hour_12}:{minute:02d} {suffix}{abbr_part} on {weekday}."

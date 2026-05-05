@@ -9,6 +9,7 @@
       "country": "United States",
       "admin1": "Florida",
       "admin2": "Palm Beach",
+      "timezone": "America/New_York",
       "population": 61047,
       "feature_code": "PPL"
     },
@@ -20,6 +21,7 @@
       "country_code": "US",
       "country": "United States",
       "admin1": "North Carolina",
+      "timezone": "America/New_York",
       "population": 250,
       "feature_code": "PPL"
     },
@@ -31,6 +33,7 @@
       "country_code": "US",
       "country": "United States",
       "admin1": "Florida",
+      "timezone": "America/New_York",
       "population": 425,
       "feature_code": "PPL"
     }

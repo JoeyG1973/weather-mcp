@@ -72,6 +72,24 @@ class TestGeocode:
         matches = await geocode(http_client, "Nowhere")
         assert matches[0].admin1 is None
         assert matches[0].population == 0
+        assert matches[0].timezone is None
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_parses_timezone_field(self, http_client: httpx.AsyncClient) -> None:
+        payload = {
+            "results": [
+                {
+                    "id": 1, "name": "Tokyo",
+                    "latitude": 35.6895, "longitude": 139.6917,
+                    "country_code": "JP", "country": "Japan",
+                    "timezone": "Asia/Tokyo", "population": 8336599,
+                }
+            ]
+        }
+        respx.get(GEOCODE_URL).respond(json=payload)
+        matches = await geocode(http_client, "Tokyo")
+        assert matches[0].timezone == "Asia/Tokyo"
 
 
 from open_meteo import fetch_current, fetch_forecast

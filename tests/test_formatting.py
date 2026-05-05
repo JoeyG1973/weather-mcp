@@ -253,6 +253,9 @@ class TestFormatForecast:
         assert "high of 76" in out
 
 
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
 from formatting import (
     DisambiguationCandidate,
     format_disambiguation,
@@ -260,7 +263,99 @@ from formatting import (
     format_geocode_error,
     format_weather_error,
     format_empty_input,
+    format_time_prefix,
 )
+
+
+class TestFormatTimePrefix:
+    """The local-time context line prepended to weather responses."""
+
+    def test_us_eastern_daylight_includes_edt(self) -> None:
+        # 2026-05-02 22:25 Eastern is during DST, so abbreviation is EDT.
+        ny = ZoneInfo("America/New_York")
+        now = datetime(2026, 5, 2, 22, 25, tzinfo=ny)
+        assert format_time_prefix(now) == "It is currently 10:25 PM EDT on Saturday."
+
+    def test_us_eastern_standard_includes_est(self) -> None:
+        # 2026-01-10 09:05 Eastern is outside DST, so abbreviation is EST.
+        ny = ZoneInfo("America/New_York")
+        now = datetime(2026, 1, 10, 9, 5, tzinfo=ny)
+        assert format_time_prefix(now) == "It is currently 9:05 AM EST on Saturday."
+
+    def test_tokyo_includes_jst(self) -> None:
+        tokyo = ZoneInfo("Asia/Tokyo")
+        now = datetime(2026, 5, 3, 11, 25, tzinfo=tokyo)
+        assert format_time_prefix(now) == "It is currently 11:25 AM JST on Sunday."
+
+    def test_india_includes_ist(self) -> None:
+        kolkata = ZoneInfo("Asia/Kolkata")
+        now = datetime(2026, 5, 3, 7, 55, tzinfo=kolkata)
+        assert format_time_prefix(now) == "It is currently 7:55 AM IST on Sunday."
+
+    def test_noon_renders_as_12_pm(self) -> None:
+        ny = ZoneInfo("America/New_York")
+        now = datetime(2026, 5, 2, 12, 0, tzinfo=ny)
+        assert "12:00 PM" in format_time_prefix(now)
+
+    def test_midnight_renders_as_12_am(self) -> None:
+        ny = ZoneInfo("America/New_York")
+        now = datetime(2026, 5, 2, 0, 0, tzinfo=ny)
+        assert "12:00 AM" in format_time_prefix(now)
+
+    def test_one_am_has_no_leading_zero(self) -> None:
+        ny = ZoneInfo("America/New_York")
+        now = datetime(2026, 5, 2, 1, 5, tzinfo=ny)
+        out = format_time_prefix(now)
+        assert "1:05 AM" in out
+        assert "01:05 AM" not in out
+
+    def test_minute_is_two_digits(self) -> None:
+        ny = ZoneInfo("America/New_York")
+        now = datetime(2026, 5, 2, 14, 3, tzinfo=ny)
+        assert "2:03 PM" in format_time_prefix(now)
+
+    def test_include_abbreviation_false_omits_abbreviation(self) -> None:
+        # Same EDT moment as the first test, but caller forces abbreviation off.
+        ny = ZoneInfo("America/New_York")
+        now = datetime(2026, 5, 2, 22, 25, tzinfo=ny)
+        out = format_time_prefix(now, include_abbreviation=False)
+        assert out == "It is currently 10:25 PM on Saturday."
+        assert "EDT" not in out
+
+    def test_utc_fallback_omits_abbreviation(self) -> None:
+        # The fallback path uses include_abbreviation=False; verify that shape directly.
+        now = datetime(2026, 5, 3, 2, 25, tzinfo=timezone.utc)
+        assert format_time_prefix(now, include_abbreviation=False) == (
+            "It is currently 2:25 AM on Sunday."
+        )
+
+    def test_offset_only_tzname_omits_abbreviation(self) -> None:
+        # Some IANA zones return an offset string from tzname() (e.g. "+09").
+        # The prefix must not embed that string — drop the abbreviation entirely.
+        # Construct a synthetic tz whose tzname() returns "+09".
+        from datetime import timedelta, tzinfo as _tzinfo
+
+        class OffsetOnlyTZ(_tzinfo):
+            def utcoffset(self, dt):  # type: ignore[override]
+                return timedelta(hours=9)
+
+            def dst(self, dt):  # type: ignore[override]
+                return timedelta(0)
+
+            def tzname(self, dt):  # type: ignore[override]
+                return "+09"
+
+        now = datetime(2026, 5, 3, 11, 25, tzinfo=OffsetOnlyTZ())
+        out = format_time_prefix(now)
+        assert out == "It is currently 11:25 AM on Sunday."
+        assert "+09" not in out
+
+    def test_requires_aware_datetime(self) -> None:
+        with pytest.raises(ValueError):
+            format_time_prefix(datetime(2026, 5, 2, 22, 25))
+
+
+
 
 
 class TestErrorAndDisambiguationFormatters:
@@ -379,6 +474,24 @@ class TestNoForbiddenCharacters:
 
     def test_format_empty_input_clean(self) -> None:
         self._assert_clean(format_empty_input(), "format_empty_input")
+
+    def test_format_time_prefix_clean_across_zones(self) -> None:
+        # Sweep representative zones at a fixed wall-clock moment so all paths get exercised.
+        sample_moments = [
+            datetime(2026, 5, 2, 22, 25, tzinfo=ZoneInfo("America/New_York")),  # EDT
+            datetime(2026, 1, 10, 9, 5, tzinfo=ZoneInfo("America/New_York")),   # EST
+            datetime(2026, 5, 3, 11, 25, tzinfo=ZoneInfo("Asia/Tokyo")),         # JST
+            datetime(2026, 5, 3, 7, 55, tzinfo=ZoneInfo("Asia/Kolkata")),        # IST
+            datetime(2026, 5, 2, 12, 0, tzinfo=ZoneInfo("America/New_York")),    # noon
+            datetime(2026, 5, 2, 0, 0, tzinfo=ZoneInfo("America/New_York")),     # midnight
+            datetime(2026, 5, 3, 2, 25, tzinfo=timezone.utc),                    # UTC fallback
+        ]
+        for moment in sample_moments:
+            self._assert_clean(format_time_prefix(moment), f"format_time_prefix {moment.tzinfo}")
+            self._assert_clean(
+                format_time_prefix(moment, include_abbreviation=False),
+                f"format_time_prefix include_abbreviation=False {moment.tzinfo}",
+            )
 
     def test_every_wmo_phrase_is_clean(self) -> None:
         for code, phrase in WMO_CODE_PHRASES.items():
