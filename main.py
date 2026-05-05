@@ -1,15 +1,26 @@
 """Weather MCP server: tool functions, lifespan, and SSE entrypoint.
 
 This module wires the MCP tools to the Open-Meteo I/O layer and the prose
-formatting layer. Server wiring (FastMCP, lifespan, run('sse')) is filled in
-by a later task; this initial cut focuses on the resolution helper.
+formatting layer, then exposes them via a FastMCP SSE server on port 8001.
 """
 from __future__ import annotations
 
-from typing import NamedTuple
+# ---------------------------------------------------------------------------
+# Standard-library imports
+# ---------------------------------------------------------------------------
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from typing import AsyncIterator, NamedTuple
 
+# ---------------------------------------------------------------------------
+# Third-party imports
+# ---------------------------------------------------------------------------
 import httpx
+from mcp.server.fastmcp import Context, FastMCP
 
+# ---------------------------------------------------------------------------
+# First-party imports
+# ---------------------------------------------------------------------------
 from formatting import (
     DisambiguationCandidate,
     expand_state_abbreviation,
@@ -23,6 +34,10 @@ from formatting import (
 )
 from open_meteo import GeocodeMatch, OpenMeteoError, fetch_current, fetch_forecast, geocode
 
+
+# ---------------------------------------------------------------------------
+# Location resolution types
+# ---------------------------------------------------------------------------
 
 class Resolved(NamedTuple):
     """A geocoded location ready for a weather lookup."""
@@ -48,6 +63,10 @@ class GeocodeFailed(NamedTuple):
 
 ResolveResult = Resolved | Disambiguation | NotFound | GeocodeFailed
 
+
+# ---------------------------------------------------------------------------
+# Resolution helpers
+# ---------------------------------------------------------------------------
 
 def _split_query(query: str) -> tuple[str, str | None]:
     """Split 'City, Qualifier' into (city, qualifier). Returns (query, None) if no comma."""
@@ -95,15 +114,17 @@ def _top_three_by_population(matches: list[GeocodeMatch]) -> list[GeocodeMatch]:
 
 async def _resolve_location(client: httpx.AsyncClient, query: str) -> ResolveResult:
     """Resolve a free-text location query to a single Resolved match or a spoken response."""
+    city, qualifier = _split_query(query)
+    # Geocode on the city name only; the qualifier is resolved locally so the
+    # Open-Meteo geocoding API (which takes a plain name) returns usable results.
+    geocode_query = city if qualifier else query
     try:
-        matches = await geocode(client, query)
+        matches = await geocode(client, geocode_query)
     except OpenMeteoError:
         return GeocodeFailed(spoken=format_geocode_error())
 
     if not matches:
         return NotFound(spoken=format_not_found(query))
-
-    city, qualifier = _split_query(query)
 
     if qualifier:
         qualified = [m for m in matches if _qualifier_matches(m, qualifier)]
@@ -124,6 +145,10 @@ async def _resolve_location(client: httpx.AsyncClient, query: str) -> ResolveRes
     candidates = [_to_candidate(m) for m in _top_three_by_population(matches)]
     return Disambiguation(spoken=format_disambiguation(query=city, qualifier=None, candidates=candidates))
 
+
+# ---------------------------------------------------------------------------
+# Internal tool functions (also unit-tested directly)
+# ---------------------------------------------------------------------------
 
 MIN_FORECAST_DAYS = 1
 MAX_FORECAST_DAYS = 14
@@ -164,3 +189,64 @@ async def get_forecast(client: httpx.AsyncClient, location: str, days: int) -> s
         return format_weather_error(result.name)
 
     return format_forecast(payload, result.name, clamped_from)
+
+
+# ---------------------------------------------------------------------------
+# FastMCP server wiring
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AppState:
+    """State shared across tool invocations for the lifetime of the server."""
+    http: httpx.AsyncClient
+
+
+@asynccontextmanager
+async def lifespan(_mcp: FastMCP) -> AsyncIterator[AppState]:
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        yield AppState(http=client)
+
+
+mcp = FastMCP(
+    "weather-mcp",
+    host="0.0.0.0",
+    port=8001,
+    lifespan=lifespan,
+)
+
+
+@mcp.tool(name="get_current_weather")
+async def get_current_weather_tool(location: str, ctx: Context) -> str:
+    """Get current weather conditions for a city.
+
+    location: A city name, optionally followed by a state or country, e.g. 'Jupiter, FL'
+              or 'Paris, France'. Returns a TTS-friendly prose description of current
+              temperature, feels-like, sky conditions, and wind.
+    """
+    state: AppState = ctx.request_context.lifespan_context
+    return await get_current_weather(state.http, location)
+
+
+@mcp.tool(name="get_forecast")
+async def get_forecast_tool(location: str, days: int, ctx: Context) -> str:
+    """Get a daily weather forecast for a city.
+
+    location: A city name, optionally followed by a state or country.
+    days: Number of days to forecast, 1 to 14. Values outside this range are clamped
+          and the response opens with a brief acknowledgment.
+    Returns a TTS-friendly prose paragraph with one sentence per day.
+    """
+    state: AppState = ctx.request_context.lifespan_context
+    return await get_forecast(state.http, location, days)
+
+
+# ---------------------------------------------------------------------------
+# Entrypoint
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    mcp.run("sse")
+
+
+if __name__ == "__main__":
+    main()
