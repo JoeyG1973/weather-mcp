@@ -1,0 +1,16 @@
+{
+  "latitude": 26.93,
+  "longitude": -80.09,
+  "current": {
+    "time": "2026-05-03T15:00",
+    "temperature_2m": 78.4,
+    "apparent_temperature": 81.0,
+    "weather_code": 2,
+    "wind_speed_10m": 9.2
+  },
+  "current_units": {
+    "temperature_2m": "°F",
+    "apparent_temperature": "°F",
+    "wind_speed_10m": "mph"
+  }
+}

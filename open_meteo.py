@@ -57,3 +57,47 @@ async def geocode(client: httpx.AsyncClient, query: str) -> list[GeocodeMatch]:
         )
         for row in raw_results
     ]
+
+
+FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+
+_IMPERIAL_PARAMS = {
+    "temperature_unit": "fahrenheit",
+    "wind_speed_unit": "mph",
+    "precipitation_unit": "inch",
+}
+
+_CURRENT_FIELDS = "temperature_2m,apparent_temperature,weather_code,wind_speed_10m"
+_DAILY_FIELDS = "temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max"
+
+
+async def fetch_current(client: httpx.AsyncClient, lat: float, lon: float) -> dict:
+    """Fetch current conditions for the given coordinates. Returns the raw JSON payload."""
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "current": _CURRENT_FIELDS,
+        **_IMPERIAL_PARAMS,
+    }
+    return await _get_forecast(client, params)
+
+
+async def fetch_forecast(client: httpx.AsyncClient, lat: float, lon: float, days: int) -> dict:
+    """Fetch the daily forecast for the given coordinates. Returns the raw JSON payload."""
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "daily": _DAILY_FIELDS,
+        "forecast_days": days,
+        **_IMPERIAL_PARAMS,
+    }
+    return await _get_forecast(client, params)
+
+
+async def _get_forecast(client: httpx.AsyncClient, params: dict) -> dict:
+    try:
+        response = await client.get(FORECAST_URL, params=params)
+        response.raise_for_status()
+        return response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise OpenMeteoError(f"forecast request failed: {exc}") from exc
