@@ -1,7 +1,8 @@
 """Weather MCP server: tool functions, lifespan, and SSE entrypoint.
 
 This module wires the MCP tools to the Open-Meteo I/O layer and the prose
-formatting layer, then exposes them via a FastMCP SSE server on port 8001.
+formatting layer, then exposes them via a FastMCP SSE server. Bind host
+and port are configurable; see _parse_args.
 """
 from __future__ import annotations
 
@@ -302,11 +303,24 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _apply_bind_settings(mcp: FastMCP, args: argparse.Namespace) -> None:
+    """Override the FastMCP instance's bind host and port from parsed args.
+
+    FastMCP reads `settings.host` and `settings.port` at run-time inside
+    `run_sse_async`, so mutating them after construction is safe. The library
+    itself uses this pattern (see `settings.mount_path`).
+    """
+    mcp.settings.host = args.host
+    mcp.settings.port = args.port
+
+
 # ---------------------------------------------------------------------------
 # Entrypoint
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    args = _parse_args()
+    _apply_bind_settings(mcp, args)
     mcp.run("sse")
 
 
