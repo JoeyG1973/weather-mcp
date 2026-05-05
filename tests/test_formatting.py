@@ -321,3 +321,65 @@ class TestErrorAndDisambiguationFormatters:
 
     def test_format_empty_input(self) -> None:
         assert format_empty_input() == "I need a city name to look up the weather."
+
+
+class TestNoForbiddenCharacters:
+    """Every TTS-bound formatter must avoid markdown, brackets, and speakable symbols."""
+
+    FORBIDDEN = set("*_#`|<>[](){}&@~^\\/=+°%;")
+
+    def _assert_clean(self, out: str, label: str) -> None:
+        bad = [c for c in self.FORBIDDEN if c in out]
+        assert not bad, f"{label} contains forbidden chars {bad}: {out!r}"
+        assert "\n\n" not in out, f"{label} contains blank line: {out!r}"
+        # Common unit abbreviations should never appear.
+        for token in (" mph", "°F", "°C"):
+            assert token not in out, f"{label} contains forbidden token {token!r}: {out!r}"
+
+    def test_format_current_clean(self, fixture) -> None:
+        payload = {
+            "current": {
+                "temperature_2m": 78,
+                "apparent_temperature": 81,
+                "weather_code": 2,
+                "wind_speed_10m": 9,
+            }
+        }
+        self._assert_clean(format_current(payload, "Jupiter, Florida"), "format_current")
+
+    def test_format_forecast_clean_3day(self, fixture) -> None:
+        out = format_forecast(fixture("forecast_jupiter_3day"), "Jupiter, Florida", None)
+        self._assert_clean(out, "format_forecast 3-day")
+
+    def test_format_forecast_clean_10day(self, fixture) -> None:
+        out = format_forecast(fixture("forecast_jupiter_10day"), "Jupiter, Florida", None)
+        self._assert_clean(out, "format_forecast 10-day")
+
+    def test_format_forecast_clean_clamped(self, fixture) -> None:
+        out = format_forecast(fixture("forecast_jupiter_3day"), "Jupiter, Florida", clamped_from=30)
+        self._assert_clean(out, "format_forecast clamped")
+
+    def test_format_disambiguation_clean(self) -> None:
+        candidates = [
+            DisambiguationCandidate("Springfield", "Illinois"),
+            DisambiguationCandidate("Springfield", "Missouri"),
+            DisambiguationCandidate("Springfield", "Massachusetts"),
+        ]
+        self._assert_clean(format_disambiguation("Springfield", None, candidates), "format_disambiguation unqualified")
+        self._assert_clean(format_disambiguation("Jupiter", "Mars", candidates), "format_disambiguation qualified")
+
+    def test_format_not_found_clean(self) -> None:
+        self._assert_clean(format_not_found("Springfield, Mars"), "format_not_found")
+
+    def test_format_geocode_error_clean(self) -> None:
+        self._assert_clean(format_geocode_error(), "format_geocode_error")
+
+    def test_format_weather_error_clean(self) -> None:
+        self._assert_clean(format_weather_error("Jupiter, Florida"), "format_weather_error")
+
+    def test_format_empty_input_clean(self) -> None:
+        self._assert_clean(format_empty_input(), "format_empty_input")
+
+    def test_every_wmo_phrase_is_clean(self) -> None:
+        for code, phrase in WMO_CODE_PHRASES.items():
+            self._assert_clean(phrase, f"WMO_CODE_PHRASES[{code}]")
