@@ -8,6 +8,8 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 # Standard-library imports
 # ---------------------------------------------------------------------------
+import argparse
+import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone as _utc
@@ -272,6 +274,32 @@ async def get_forecast_tool(location: str, days: int, ctx: Context) -> str:
     """
     state: AppState = ctx.request_context.lifespan_context
     return await get_forecast(state.http, location, days)
+
+
+# ---------------------------------------------------------------------------
+# CLI / environment configuration
+# ---------------------------------------------------------------------------
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse CLI args; env vars supply defaults; hardcoded fallback last.
+
+    Precedence: CLI flag > environment variable > hardcoded default.
+    A non-integer WEATHER_MCP_PORT raises ValueError at startup — fail fast,
+    no silent fallback.
+    """
+    parser = argparse.ArgumentParser(prog="weather-mcp")
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("WEATHER_MCP_HOST", "0.0.0.0"),
+        help="Bind address (env: WEATHER_MCP_HOST). Default: 0.0.0.0",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("WEATHER_MCP_PORT", "8001")),
+        help="Bind port (env: WEATHER_MCP_PORT). Default: 8001",
+    )
+    return parser.parse_args(argv)
 
 
 # ---------------------------------------------------------------------------
