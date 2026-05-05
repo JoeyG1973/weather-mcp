@@ -13,11 +13,14 @@ import httpx
 from formatting import (
     DisambiguationCandidate,
     expand_state_abbreviation,
+    format_current,
     format_disambiguation,
+    format_empty_input,
     format_geocode_error,
     format_not_found,
+    format_weather_error,
 )
-from open_meteo import GeocodeMatch, OpenMeteoError, geocode
+from open_meteo import GeocodeMatch, OpenMeteoError, fetch_current, geocode
 
 
 class Resolved(NamedTuple):
@@ -119,3 +122,20 @@ async def _resolve_location(client: httpx.AsyncClient, query: str) -> ResolveRes
         return Resolved(name=_resolved_name(m), latitude=m.latitude, longitude=m.longitude)
     candidates = [_to_candidate(m) for m in _top_three_by_population(matches)]
     return Disambiguation(spoken=format_disambiguation(query=city, qualifier=None, candidates=candidates))
+
+
+async def get_current_weather(client: httpx.AsyncClient, location: str) -> str:
+    """MCP tool body: return TTS-friendly prose describing current weather at `location`."""
+    if not location or not location.strip():
+        return format_empty_input()
+
+    result = await _resolve_location(client, location)
+    if not isinstance(result, Resolved):
+        return result.spoken
+
+    try:
+        payload = await fetch_current(client, result.latitude, result.longitude)
+    except OpenMeteoError:
+        return format_weather_error(result.name)
+
+    return format_current(payload, result.name)
