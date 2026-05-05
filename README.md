@@ -45,7 +45,10 @@ uv sync
 uv run weather-mcp
 ```
 
-The server binds `0.0.0.0:8001` and speaks the SSE transport.
+By default the server binds `0.0.0.0:8001` and speaks the SSE transport.
+Override the bind with `--host` and `--port`, or with the environment
+variables `WEATHER_MCP_HOST` and `WEATHER_MCP_PORT`. CLI flags take
+precedence over environment variables.
 
 ## Connecting a client
 
@@ -99,6 +102,9 @@ systemctl daemon-reload
 systemctl enable --now weather-mcp
 journalctl -u weather-mcp -f
 ```
+
+To bind a different address or port, set `Environment=WEATHER_MCP_HOST=...`
+and/or `Environment=WEATHER_MCP_PORT=...` in the unit's `[Service]` section.
 
 ## Project layout
 
