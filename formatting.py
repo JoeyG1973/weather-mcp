@@ -99,3 +99,37 @@ WMO_CODE_PHRASES: dict[int, str] = {
 def weather_code_to_phrase(code: int) -> str:
     """Map a WMO weather code to a TTS-friendly phrase. Unknown codes return a generic phrase."""
     return WMO_CODE_PHRASES.get(code, "unknown conditions")
+
+
+# WMO codes whose phrases describe the state of the sky (no precipitation noun).
+_SKY_STATE_CODES = frozenset({0, 1, 2, 3})
+
+
+def _conditions_clause(weather_code: int) -> str:
+    """Return the post-'with' clause for a weather code.
+
+    Sky-state codes (clear, mostly clear, partly cloudy, overcast) get a 'skies' suffix
+    unless the phrase already ends in 'skies'. Precipitation phrases stand alone.
+    """
+    phrase = weather_code_to_phrase(weather_code)
+    if weather_code in _SKY_STATE_CODES and not phrase.endswith("skies"):
+        return f"{phrase} skies"
+    return phrase
+
+
+def format_current(payload: dict, resolved_name: str) -> str:
+    """Build the spoken sentence for current weather.
+
+    `payload` is the Open-Meteo /v1/forecast response with `current=...` fields.
+    `resolved_name` is the city/state phrase to speak back, e.g. 'Jupiter, Florida'.
+    """
+    cur = payload["current"]
+    temp = round(cur["temperature_2m"])
+    feels = round(cur["apparent_temperature"])
+    wind = round(cur["wind_speed_10m"])
+    code = int(cur["weather_code"])
+    conditions = _conditions_clause(code)
+    return (
+        f"In {resolved_name}, it is currently {temp} degrees with {conditions}. "
+        f"It feels like {feels} degrees, with winds out around {wind} miles per hour."
+    )

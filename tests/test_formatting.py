@@ -105,3 +105,68 @@ class TestWmoCodePhrases:
     def test_unknown_code_returns_generic_phrase(self) -> None:
         # Defensive: if Open-Meteo returns a code we did not catalog, do not crash.
         assert weather_code_to_phrase(999) == "unknown conditions"
+
+
+from formatting import format_current
+
+
+SAMPLE_CURRENT_PAYLOAD = {
+    "current": {
+        "temperature_2m": 78,
+        "apparent_temperature": 81,
+        "weather_code": 2,
+        "wind_speed_10m": 9,
+    }
+}
+
+
+class TestFormatCurrent:
+    def test_basic_prose(self) -> None:
+        out = format_current(SAMPLE_CURRENT_PAYLOAD, "Jupiter, Florida")
+        # weather_code 2 -> "partly cloudy" (no trailing 'skies' in the phrase, so suffix is added)
+        assert out == (
+            "In Jupiter, Florida, it is currently 78 degrees with partly cloudy skies. "
+            "It feels like 81 degrees, with winds out around 9 miles per hour."
+        )
+
+    def test_rounds_floats(self) -> None:
+        payload = {
+            "current": {
+                "temperature_2m": 77.6,
+                "apparent_temperature": 80.4,
+                "weather_code": 0,
+                "wind_speed_10m": 8.9,
+            }
+        }
+        out = format_current(payload, "East Hanover, New Jersey")
+        assert "78 degrees" in out
+        assert "80 degrees" in out
+        assert "9 miles per hour" in out
+        assert "clear skies" in out
+
+    def test_phrase_with_skies_does_not_double_suffix(self) -> None:
+        payload = {
+            "current": {
+                "temperature_2m": 70,
+                "apparent_temperature": 70,
+                "weather_code": 0,  # 'clear skies'
+                "wind_speed_10m": 5,
+            }
+        }
+        out = format_current(payload, "Jupiter, Florida")
+        assert "skies skies" not in out
+        assert "with clear skies." in out  # the period from end of first sentence
+
+    def test_rain_phrase_uses_no_suffix(self) -> None:
+        payload = {
+            "current": {
+                "temperature_2m": 60,
+                "apparent_temperature": 58,
+                "weather_code": 61,  # 'light rain'
+                "wind_speed_10m": 12,
+            }
+        }
+        out = format_current(payload, "Jupiter, Florida")
+        # 'light rain' is not skies-shaped; formatter says 'with light rain' (no suffix).
+        assert "with light rain." in out
+        assert "rain skies" not in out
