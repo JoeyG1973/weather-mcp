@@ -16,11 +16,12 @@ from formatting import (
     format_current,
     format_disambiguation,
     format_empty_input,
+    format_forecast,
     format_geocode_error,
     format_not_found,
     format_weather_error,
 )
-from open_meteo import GeocodeMatch, OpenMeteoError, fetch_current, geocode
+from open_meteo import GeocodeMatch, OpenMeteoError, fetch_current, fetch_forecast, geocode
 
 
 class Resolved(NamedTuple):
@@ -124,6 +125,10 @@ async def _resolve_location(client: httpx.AsyncClient, query: str) -> ResolveRes
     return Disambiguation(spoken=format_disambiguation(query=city, qualifier=None, candidates=candidates))
 
 
+MIN_FORECAST_DAYS = 1
+MAX_FORECAST_DAYS = 14
+
+
 async def get_current_weather(client: httpx.AsyncClient, location: str) -> str:
     """MCP tool body: return TTS-friendly prose describing current weather at `location`."""
     if not location or not location.strip():
@@ -139,3 +144,23 @@ async def get_current_weather(client: httpx.AsyncClient, location: str) -> str:
         return format_weather_error(result.name)
 
     return format_current(payload, result.name)
+
+
+async def get_forecast(client: httpx.AsyncClient, location: str, days: int) -> str:
+    """MCP tool body: return TTS-friendly prose describing the daily forecast for `location`."""
+    if not location or not location.strip():
+        return format_empty_input()
+
+    effective_days = max(MIN_FORECAST_DAYS, min(MAX_FORECAST_DAYS, days))
+    clamped_from = days if days != effective_days else None
+
+    result = await _resolve_location(client, location)
+    if not isinstance(result, Resolved):
+        return result.spoken
+
+    try:
+        payload = await fetch_forecast(client, result.latitude, result.longitude, effective_days)
+    except OpenMeteoError:
+        return format_weather_error(result.name)
+
+    return format_forecast(payload, result.name, clamped_from)
