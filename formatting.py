@@ -7,6 +7,8 @@ no unit abbreviations, no degree or percent symbols.
 """
 from __future__ import annotations
 
+from datetime import date as _date
+
 US_STATE_ABBREVIATIONS: dict[str, str] = {
     "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
     "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
@@ -133,3 +135,72 @@ def format_current(payload: dict, resolved_name: str) -> str:
         f"In {resolved_name}, it is currently {temp} degrees with {conditions}. "
         f"It feels like {feels} degrees, with winds out around {wind} miles per hour."
     )
+
+
+_WEEKDAY_NAMES = [
+    "Monday", "Tuesday", "Wednesday", "Thursday",
+    "Friday", "Saturday", "Sunday",
+]
+
+
+def _day_anchor(index: int, iso_date: str) -> str:
+    """Return the per-day anchor phrase for the forecast.
+
+    index is 0-based: 0 -> 'Tomorrow', 1..6 -> bare weekday, 7+ -> '<weekday> the <ordinal>'.
+    """
+    if index == 0:
+        return "Tomorrow"
+    d = _date.fromisoformat(iso_date)
+    weekday = _WEEKDAY_NAMES[d.weekday()]
+    if index < 7:
+        return weekday
+    return f"{weekday} the {ordinal_word(d.day)}"
+
+
+def _per_day_sentence(anchor: str, conditions: str, hi: int, lo: int, precip: int, terse: bool) -> str:
+    base = f"{anchor}, {conditions} with a high of {hi} and a low of {lo}"
+    if terse:
+        return f"{base}."
+    return f"{base}, and a {precip} percent chance of rain."
+
+
+def format_forecast(payload: dict, resolved_name: str, clamped_from: int | None) -> str:
+    """Build the spoken paragraph for an N-day daily forecast.
+
+    `payload` is the Open-Meteo /v1/forecast response with `daily=...` fields.
+    `clamped_from` is the original requested day count if it was clamped to fit
+    the supported 1..14 range, otherwise None.
+    """
+    daily = payload["daily"]
+    times: list[str] = daily["time"]
+    highs: list[float] = daily["temperature_2m_max"]
+    lows: list[float] = daily["temperature_2m_min"]
+    codes: list[int] = daily["weather_code"]
+    precips: list[int] = daily["precipitation_probability_max"]
+    n = len(times)
+
+    day_word = "day"
+
+    if clamped_from is None:
+        prefix = ""
+    elif clamped_from > n:  # asked for more than supported, clamped down
+        prefix = f"I can only forecast up to 14 days out, so here is the {n} {day_word} forecast for {resolved_name}. "
+    else:  # asked for less than 1, clamped up
+        prefix = f"I can only forecast at least 1 day out, so here is the {n} {day_word} forecast for {resolved_name}. "
+
+    if prefix:
+        opener = ""
+    else:
+        opener = f"Here is the {n} {day_word} forecast for {resolved_name}. "
+
+    sentences: list[str] = []
+    for i in range(n):
+        anchor = _day_anchor(i, times[i])
+        conditions = _conditions_clause(int(codes[i]))
+        hi = round(highs[i])
+        lo = round(lows[i])
+        precip = int(precips[i])
+        terse = i >= 7
+        sentences.append(_per_day_sentence(anchor, conditions, hi, lo, precip, terse))
+
+    return prefix + opener + " ".join(sentences)

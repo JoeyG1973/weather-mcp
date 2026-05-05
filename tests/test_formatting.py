@@ -170,3 +170,84 @@ class TestFormatCurrent:
         # 'light rain' is not skies-shaped; formatter says 'with light rain' (no suffix).
         assert "with light rain." in out
         assert "rain skies" not in out
+
+
+from formatting import format_forecast
+
+
+class TestFormatForecast:
+    def test_three_day_forecast_full_phrasing(self, fixture) -> None:
+        payload = fixture("forecast_jupiter_3day")
+        out = format_forecast(payload, "Jupiter, Florida", clamped_from=None)
+        # 2026-05-04 is a Monday. Day 1 is "Tomorrow"; day 2 is "Tuesday"; day 3 is "Wednesday".
+        assert out == (
+            "Here is the 3 day forecast for Jupiter, Florida. "
+            "Tomorrow, partly cloudy skies with a high of 82 and a low of 68, and a 20 percent chance of rain. "
+            "Tuesday, rain showers with a high of 79 and a low of 65, and a 60 percent chance of rain. "
+            "Wednesday, light rain with a high of 76 and a low of 63, and a 70 percent chance of rain."
+        )
+
+    def test_one_day_forecast_uses_singular_day(self, fixture) -> None:
+        payload = {
+            "daily": {
+                "time": ["2026-05-04"],
+                "temperature_2m_max": [82],
+                "temperature_2m_min": [68],
+                "weather_code": [2],
+                "precipitation_probability_max": [20],
+            }
+        }
+        out = format_forecast(payload, "Jupiter, Florida", clamped_from=None)
+        assert out.startswith("Here is the 1 day forecast for Jupiter, Florida. ")
+        assert "Tomorrow" in out
+
+    def test_clamp_above_14_prefix(self, fixture) -> None:
+        payload = fixture("forecast_jupiter_3day")  # 3-day fixture stands in; only the prefix matters
+        out = format_forecast(payload, "Jupiter, Florida", clamped_from=30)
+        assert out.startswith(
+            "I can only forecast up to 14 days out, so here is the 3 day forecast for Jupiter, Florida. "
+        )
+
+    def test_clamp_below_1_prefix(self, fixture) -> None:
+        payload = {
+            "daily": {
+                "time": ["2026-05-04"],
+                "temperature_2m_max": [82],
+                "temperature_2m_min": [68],
+                "weather_code": [2],
+                "precipitation_probability_max": [20],
+            }
+        }
+        out = format_forecast(payload, "Jupiter, Florida", clamped_from=-3)
+        assert out.startswith(
+            "I can only forecast at least 1 day out, so here is the 1 day forecast for Jupiter, Florida. "
+        )
+
+    def test_terse_phrasing_past_day_7(self, fixture) -> None:
+        payload = fixture("forecast_jupiter_10day")
+        out = format_forecast(payload, "Jupiter, Florida", clamped_from=None)
+        # 2026-05-04 is Monday, so day 8 is 2026-05-11 (Monday) — speak as "Monday the eleventh".
+        assert "Monday the eleventh, " in out
+        assert "Tuesday the twelfth, " in out
+        assert "Wednesday the thirteenth, " in out
+        # Days 8-10 must NOT include 'percent chance of rain'.
+        terse_segment = out.split("Monday the eleventh, ", 1)[1]
+        assert "percent chance of rain" not in terse_segment
+        # Days 1-7 SHOULD include 'percent chance of rain'.
+        full_segment = out.split("Monday the eleventh, ")[0]
+        assert "percent chance of rain" in full_segment
+
+    def test_weekday_anchors_for_first_seven_days(self, fixture) -> None:
+        payload = fixture("forecast_jupiter_10day")
+        out = format_forecast(payload, "Jupiter, Florida", clamped_from=None)
+        # First seven entries: Tomorrow, Tue, Wed, Thu, Fri, Sat, Sun
+        assert "Tomorrow, " in out
+        for weekday in ("Tuesday, ", "Wednesday, ", "Thursday, ", "Friday, ", "Saturday, ", "Sunday, "):
+            assert weekday in out
+
+    def test_rounds_temps(self, fixture) -> None:
+        payload = fixture("forecast_jupiter_3day")  # has 82.1, 79.4, 76.0
+        out = format_forecast(payload, "Jupiter, Florida", clamped_from=None)
+        assert "high of 82" in out
+        assert "high of 79" in out
+        assert "high of 76" in out
